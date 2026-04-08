@@ -5,12 +5,12 @@
 
 // 1. Firebase 連線設定 (請務必替換為你專屬的金鑰)
 const firebaseConfig = {
-    apiKey: "你的_API_KEY",
-    authDomain: "你的_PROJECT_ID.firebaseapp.com",
-    projectId: "你的_PROJECT_ID",
-    storageBucket: "你的_PROJECT_ID.firebasestorage.app",
-    messagingSenderId: "你的_SENDER_ID",
-    appId: "你的_APP_ID"
+    apiKey: "AIzaSyAmVwq-Wny1KMRGNSdOnBEJ_A-3HmTO-hM",
+      authDomain: "store-schedule-3b056.firebaseapp.com",
+      projectId: "store-schedule-3b056",
+      storageBucket: "store-schedule-3b056.firebasestorage.app",
+      messagingSenderId: "296522693619",
+      appId: "1:296522693619:web:f90ec5d666c7a4a5943086"
 };
 
 // 初始化 Firebase (防止重複初始化)
