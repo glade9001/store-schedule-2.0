@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>📅 門市排班神器 - 登入</title>
+  
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="config.js"></script>
+
+  <style>
+    body { font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif; padding: 0; background-color: #f1f3f4; margin: 0; color: #202124; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    
+    .login-container { background: white; padding: 40px 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 85%; max-width: 400px; text-align: center; }
+    .app-logo { font-size: 50px; margin-bottom: 10px; }
+    .app-title { font-size: 22px; font-weight: 900; color: #1a73e8; margin-bottom: 30px; letter-spacing: 1px; }
+    
+    .input-group { text-align: left; margin-bottom: 20px; }
+    .input-group label { display: block; font-size: 13px; font-weight: bold; color: #5f6368; margin-bottom: 8px; }
+    .input-group select, .input-group input { width: 100%; padding: 12px 15px; border: 1.5px solid #dadce0; border-radius: 10px; font-size: 15px; box-sizing: border-box; outline: none; transition: 0.2s; background: #f8f9fa; }
+    .input-group select:focus, .input-group input:focus { border-color: #1a73e8; background: white; box-shadow: 0 0 0 3px rgba(26,115,232,0.1); }
+    
+    .btn-login { width: 100%; padding: 15px; background: #1a73e8; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; box-shadow: 0 4px 10px rgba(26,115,232,0.3); transition: 0.2s; }
+    .btn-login:active { transform: scale(0.98); box-shadow: none; }
+    .btn-login:disabled { background: #9aa0a6; cursor: not-allowed; box-shadow: none; }
+    
+    .forgot-pw { margin-top: 20px; font-size: 13px; color: #1a73e8; cursor: pointer; text-decoration: underline; }
+    .error-msg { color: #d93025; font-size: 13px; font-weight: bold; margin-bottom: 15px; display: none; background: #fce8e6; padding: 10px; border-radius: 8px; }
+
+    #loadingOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; color: #1a73e8; font-weight: bold; }
+    .spinner { border: 4px solid rgba(26,115,232,0.2); border-top: 4px solid #1a73e8; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div id="loadingOverlay"><div class="spinner"></div><div id="loadingText">載入門市資料中...</div></div>
+
+  <div class="login-container">
+      <div class="app-logo">📅</div>
+      <div class="app-title">門市排班神器</div>
+
+      <div class="error-msg" id="errorMsg"></div>
+
+      <div class="input-group">
+          <label>🏪 選擇所屬門市</label>
+          <select id="loginStore">
+              <option value="">讀取中...</option>
+          </select>
+      </div>
+
+      <div class="input-group">
+          <label>🪪 身分證字號</label>
+          <input type="text" id="loginId" placeholder="請輸入身分證字號" style="text-transform: uppercase;">
+      </div>
+
+      <div class="input-group">
+          <label>🔑 密碼</label>
+          <input type="password" id="loginPw" placeholder="預設密碼 123456">
+      </div>
+
+      <button class="btn-login" id="loginBtn" onclick="handleLogin()">登入</button>
+      <div class="forgot-pw" onclick="alert('請聯繫店長為您重設密碼！')">忘記密碼？</div>
+  </div>
+
+  <script>
+    // 1. 頁面載入時，先去抓取所有門市名稱供選擇
+    window.onload = async () => {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        try {
+            const snap = await window.db.collection('settings').doc('globalConfig').get();
+            let stores = [];
+            if (snap.exists && snap.data().stores) {
+                stores = snap.data().stores;
+            }
+            
+            let sel = document.getElementById('loginStore');
+            if (stores.length > 0) {
+                sel.innerHTML = '<option value="">-- 請選擇門市 --</option>';
+                stores.forEach(s => { sel.innerHTML += `<option value="${s}">${s}</option>`; });
+                
+                // 貼心小設計：記住上次登入的門市
+                let lastStore = localStorage.getItem('lastStore');
+                if(lastStore && stores.includes(lastStore)) sel.value = lastStore;
+            } else {
+                sel.innerHTML = '<option value="">無可用門市</option>';
+            }
+        } catch (e) {
+            showError("無法載入門市清單，請檢查網路連線。");
+        }
+        document.getElementById('loadingOverlay').style.display = 'none';
+    };
+
+    function showError(msg) {
+        let errDiv = document.getElementById('errorMsg');
+        errDiv.innerText = msg;
+        errDiv.style.display = 'block';
+    }
+
+    // 2. 處理登入邏輯
+    async function handleLogin() {
+        let store = document.getElementById('loginStore').value;
+        let idNumber = document.getElementById('loginId').value.trim().toUpperCase();
+        let pw = document.getElementById('loginPw').value.trim();
+        let btn = document.getElementById('loginBtn');
+
+        // 基礎表單檢查
+        if (!store) return showError("請選擇所屬門市！");
+        if (!idNumber) return showError("請輸入身分證字號！");
+        if (!pw) return showError("請輸入密碼！");
+
+        document.getElementById('errorMsg').style.display = 'none';
+        btn.disabled = true;
+        btn.innerText = "驗證中...";
+
+        try {
+            // 去 Firebase 尋找該門市的員工資料
+            let empRef = window.db.collection('stores').doc(store).collection('employees');
+            // 尋找 idNumber 欄位符合輸入值的員工
+            let querySnapshot = await empRef.where('idNumber', '==', idNumber).get();
+
+            if (querySnapshot.empty) {
+                // 如果找不到這個身分證字號
+                showError("查無此身分證字號，請確認您選擇的門市是否正確！");
+                btn.disabled = false;
+                btn.innerText = "登入";
+                return;
+            }
+
+            // 假設身分證字號是唯一的，取第一筆資料
+            let userDoc = querySnapshot.docs[0];
+            let userData = userDoc.data();
+            let userName = userDoc.id; // Firebase 的 document ID 是員工姓名
+
+            // 檢查密碼 (目前預設全部是 123456，未來你可以在資料庫加上 password 欄位來比對)
+            // 這裡我們先寫死驗證 123456，或是如果資料庫有存 password 就比對資料庫的
+            let correctPw = userData.password || "123456"; 
+
+            if (pw !== correctPw) {
+                showError("密碼錯誤，請重試！");
+                btn.disabled = false;
+                btn.innerText = "登入";
+                return;
+            }
+
+            // 檢查是否已離職
+            if (userData.status === '離職') {
+                showError("此帳號已設定為離職，無法登入。");
+                btn.disabled = false;
+                btn.innerText = "登入";
+                return;
+            }
+
+            // 🎉 登入成功！把身分寫入 localStorage
+            localStorage.setItem('currentUser', userName);
+            localStorage.setItem('userRole', userData.role);
+            localStorage.setItem('lastStore', store); // 記錄門市，讓首頁不用再選一次
+
+            btn.innerText = "登入成功！跳轉中...";
+            btn.style.background = "#34a853";
+
+            // 延遲一下讓使用者看到成功訊息，然後跳轉到首頁
+            setTimeout(() => {
+                window.location.href = "index.html";
+            }, 800);
+
+        } catch (e) {
+            showError("系統發生錯誤，請稍後再試：" + e.message);
+            btn.disabled = false;
+            btn.innerText = "登入";
+        }
+    }
+  </script>
+</body>
+</html>
