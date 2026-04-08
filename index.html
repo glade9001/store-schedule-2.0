@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>📅 門市排班神器 - 首頁</title>
+  
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="config.js"></script>
+
+  <style>
+    body { font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif; padding: 0; background-color: #f8f9fa; margin: 0; color: #202124; overflow-x: hidden; }
+    
+    /* 1. 頂部狀態區 */
+    .home-header { background: #1a73e8; color: white; padding: 30px 20px 40px 20px; border-bottom-left-radius: 30px; border-bottom-right-radius: 30px; box-shadow: 0 4px 15px rgba(26,115,232,0.3); }
+    .home-greeting { font-size: 24px; font-weight: 900; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
+    .home-time { font-size: 14px; opacity: 0.9; margin-bottom: 15px; }
+    .home-status-banner { background: rgba(255,255,255,0.2); padding: 10px 15px; border-radius: 10px; font-weight: bold; font-size: 16px; margin-bottom: 25px; display: inline-block; backdrop-filter: blur(5px); }
+    
+    .punch-container { display: flex; gap: 15px; justify-content: center; margin-top: -30px; padding: 0 20px; }
+    .btn-punch { flex: 1; padding: 20px 0; border-radius: 15px; font-size: 18px; font-weight: 900; border: none; box-shadow: 0 5px 15px rgba(0,0,0,0.15); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; transition: transform 0.1s; }
+    .btn-punch:active { transform: scale(0.95); }
+    .btn-punch-in { background: #34a853; color: white; }
+    .btn-punch-out { background: #e0e0e0; color: #5f6368; }
+
+    /* 2. 核心快顯卡片區 */
+    .dashboard-section { padding: 30px 20px 10px 20px; }
+    .dash-card { background: white; padding: 15px; border-radius: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 15px; }
+    .dash-card-title { font-size: 14px; font-weight: bold; color: #5f6368; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .mini-week-row { display: flex; justify-content: space-between; text-align: center; }
+    .mini-day { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .mini-day-label { font-size: 11px; color: #9aa0a6; }
+    .mini-day-value { font-size: 14px; font-weight: bold; color: #202124; margin-top: 4px; }
+    .val-rest { color: #d93025; }
+    .val-work { color: #1a73e8; }
+    .stat-number { font-size: 24px; font-weight: 900; color: #1a73e8; }
+
+    /* 3. 九宮格選單區 */
+    .grid-menu { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; padding: 10px 20px 30px 20px; }
+    .grid-item { background: white; padding: 15px 5px; border-radius: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; transition: 0.2s; border: 1px solid transparent; text-decoration: none; color: inherit; }
+    .grid-item:active { background: #f1f3f4; transform: scale(0.95); }
+    .grid-icon { font-size: 28px; }
+    .grid-label { font-size: 12px; font-weight: bold; color: #3c4043; line-height: 1.3; }
+    .grid-item.locked { background: #f8f9fa; border: 1px dashed #dadce0; opacity: 0.8; }
+    
+    /* Loading 遮罩 */
+    #loadingOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000000; flex-direction: column; justify-content: center; align-items: center; color: white; font-weight: bold; }
+    .spinner { border: 4px solid rgba(255,255,255,0.2); border-top: 4px solid #fff; border-radius: 50%; width: 45px; height: 45px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div id="loadingOverlay"><div class="spinner"></div><div id="loadingText">載入資料中...</div></div>
+
+  <div class="home-header">
+      <div class="home-greeting">
+          <span id="homeGreetingText">早安，讀取中...👋</span>
+          <input type="hidden" id="weekSelector">
+          <select id="homeStoreSelector" onchange="fetchAllStoreData()" style="font-size:12px; background:rgba(255,255,255,0.2); color:white; border:1px solid rgba(255,255,255,0.5); border-radius:15px; padding:4px 8px;"></select>
+      </div>
+      <div class="home-time" id="homeClock">讀取時間中...</div>
+      <div class="home-status-banner" id="homeTodayStatus">今日班別讀取中...</div>
+  </div>
+
+  <div class="punch-container">
+      <button class="btn-punch btn-punch-in" onclick="mockPunch('in')"><span style="font-size: 24px;">📍</span>上班打卡</button>
+      <button class="btn-punch btn-punch-out" onclick="mockPunch('out')"><span style="font-size: 24px;">🏃‍♂️</span>下班打卡</button>
+  </div>
+
+  <div class="dashboard-section">
+      <div class="dash-card">
+          <div class="dash-card-title">
+              <span>📅 本週班表預覽</span>
+              <select id="currentUserSelect" onchange="renderHomeDashboard()" style="font-size:12px; padding:4px 8px; border-radius:6px; border:1px solid #dadce0; background:#f1f3f4; color:#3c4043; outline:none; cursor:pointer;">
+                  <option>讀取中...</option>
+              </select>
+          </div>
+          <div class="mini-week-row" id="homeWeekContainer">
+              <div style="padding:20px; text-align:center; width:100%; color:#999; font-size:12px;">載入排班資料中...</div>
+          </div>
+      </div>
+
+      <div class="dash-card">
+          <div class="dash-card-title">📊 本月累計數據</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div style="background:#f8f9fa; padding:10px; border-radius:10px;">
+                  <div style="font-size:11px; color:#5f6368;">累計工時 (工讀)</div>
+                  <div class="stat-number">120.5 <span style="font-size:14px; font-weight:normal; color:#333;">小時</span></div>
+                  <div style="font-size:10px; color:#1a73e8; margin-top:5px;">預估薪資: $22,292</div>
+              </div>
+              <div style="background:#fce8e6; padding:10px; border-radius:10px;">
+                  <div style="font-size:11px; color:#d93025;">累計休假 (正職)</div>
+                  <div class="stat-number" style="color:#d93025;">6 <span style="font-size:14px; font-weight:normal; color:#333;">天</span></div>
+                  <div style="font-size:10px; color:#5f6368; margin-top:5px;">本月還剩: 2 天</div>
+              </div>
+          </div>
+      </div>
+  </div>
+
+  <div class="grid-menu">
+      <div class="grid-item" onclick="alert('本週班表建置中...')"><div class="grid-icon">📅</div><div class="grid-label">本週班表</div></div>
+      <div class="grid-item" onclick="alert('劃休系統建置中...')"><div class="grid-icon">✍️</div><div class="grid-label">劃休系統</div></div>
+      <div class="grid-item" onclick="alert('薪資系統建置中...')"><div class="grid-icon">💰</div><div class="grid-label">薪資系統</div></div>
+      <div class="grid-item" onclick="alert('特休系統建置中...')"><div class="grid-icon">🌴</div><div class="grid-label">特休系統</div></div>
+      
+      <a href="schedule.html" class="grid-item locked">
+          <div class="grid-icon">🛠️</div>
+          <div class="grid-label">排班系統<br><span style="font-size:10px; color:#d93025;">🔒 限店長</span></div>
+      </a>
+      
+      <div class="grid-item" onclick="alert('設定建置中...')"><div class="grid-icon">⚙️</div><div class="grid-label">個人設定<br>與紀錄</div></div>
+  </div>
+
+  <script>
+    let currentUser = localStorage.getItem('currentUser') || "";
+
+    // 1. 初始化首頁
+    window.onload = async () => {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        document.getElementById('weekSelector').value = getNextWeekString(); // 呼叫 config.js 的函式
+        
+        try {
+            const snap = await window.db.collection('settings').doc('globalConfig').get();
+            if (snap.exists) appConfig = snap.data();
+            
+            let selHome = document.getElementById('homeStoreSelector');
+            selHome.innerHTML = '';
+            (appConfig.stores || []).forEach(s => { selHome.innerHTML += `<option value="${s}">${s}</option>`; }); 
+            let last = localStorage.getItem('lastStore') || appConfig.stores[0] || "";
+            selHome.value = last;
+            
+            await fetchAllStoreData();
+        } catch (e) { alert("連線失敗：" + e.message); document.getElementById('loadingOverlay').style.display = 'none'; }
+    };
+
+    // 2. 抓取資料庫資料
+    async function fetchAllStoreData() {
+        let store = document.getElementById('homeStoreSelector').value; 
+        let weekStr = document.getElementById('weekSelector').value;
+        if(!store || !weekStr) return; 
+        localStorage.setItem('lastStore', store); 
+        
+        appData.allStoresRecords = []; appData.records = []; appData.employees = [];
+        
+        try {
+            // 只抓取當前門市的員工與排班 (首頁不需要跨店複雜邏輯，以求速度最快)
+            let empSnap = await window.db.collection('stores').doc(store).collection('employees').get();
+            let weekSnap = await window.db.collection('stores').doc(store).collection('weeks').doc(weekStr).get();
+            
+            if(weekSnap.exists && weekSnap.data().records) {
+                appData.records = weekSnap.data().records;
+            }
+            
+            let scheduledNames = appData.records.map(r => r.name);
+            empSnap.forEach(d => { 
+                let e = d.data(); 
+                if(e.status !== '離職' || scheduledNames.includes(d.id)) { appData.employees.push({name: d.id, ...e}); } 
+            });
+            appData.employees.sort((a,b) => (a.sortKey||0) - (b.sortKey||0));
+
+            // 資料抓完後，渲染畫面
+            renderHomeDashboard();
+        } catch (e) { console.error("讀取失敗", e); }
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }
+
+    // 3. 渲染首頁儀表板
+    function renderHomeDashboard() {
+        let container = document.getElementById('homeWeekContainer');
+        let weekStr = document.getElementById('weekSelector').value;
+        let myStore = document.getElementById('homeStoreSelector').value;
+        
+        if (!appData.employees || appData.employees.length === 0) {
+            container.innerHTML = '<div style="padding:20px; text-align:center; width:100%; color:#999; font-size:12px;">該門市目前無員工資料</div>';
+            return;
+        }
+
+        // 建立身分切換選單
+        let userSelect = document.getElementById('currentUserSelect');
+        if (userSelect.options.length !== appData.employees.length) {
+            userSelect.innerHTML = '';
+            appData.employees.forEach(emp => { userSelect.innerHTML += `<option value="${emp.name}">${emp.name}</option>`; });
+            if (currentUser && appData.employees.some(e => e.name === currentUser)) { userSelect.value = currentUser; } 
+            else { currentUser = appData.employees[0].name; userSelect.value = currentUser; }
+        }
+        
+        currentUser = userSelect.value;
+        localStorage.setItem('currentUser', currentUser);
+        document.getElementById('homeGreetingText').innerText = `早安，${currentUser}！👋`;
+
+        let todayDayName = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'][new Date().getDay()];
+        let todayShiftText = '今日無排班';
+        let html = '';
+
+        // 繪製七天小卡
+        dayNames.forEach((day, i) => {
+            let dayLabel = ['一','二','三','四','五','六','日'][i];
+            let rec = appData.records.find(r => r.name === currentUser && r.day === day && r.week === weekStr);
+            
+            // 這裡不再抓取跨店，首頁以簡單顯示為主，若要顯示跨店，需抓取 allStoresRecords
+            if (!rec) rec = { shift: '' };
+
+            let shiftText = rec.shift || '-';
+            let colorClass = 'val-work';
+            
+            if (shiftText === '排休' || shiftText === '指休') { shiftText = '休'; colorClass = 'val-rest'; } 
+            else if (shiftText === '-') { colorClass = ''; shiftText = '<span style="color:#ccc; font-size:11px;">未排</span>'; }
+
+            let isToday = (day === todayDayName);
+            if (isToday) {
+                if (shiftText === '休') todayShiftText = '今日排休 🎉，好好休息！';
+                else if (rec.shift) todayShiftText = `今日班別：${rec.shift}`;
+            }
+
+            html += `<div class="mini-day" style="${isToday ? 'background:#e8f0fe; border-radius:8px; padding:4px 0;' : 'padding:4px 0;'}">
+                        <div class="mini-day-label" style="${isToday ? 'color:#1a73e8; font-weight:bold;' : ''}">${dayLabel}</div>
+                        <div class="mini-day-value ${colorClass}">${shiftText}</div>
+                     </div>`;
+        });
+
+        container.innerHTML = html;
+        document.getElementById('homeTodayStatus').innerText = todayShiftText;
+    }
+
+    // 時鐘與模擬打卡
+    function updateClock() { const now = new Date(); const days = ['日', '一', '二', '三', '四', '五', '六']; document.getElementById('homeClock').innerText = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} 星期${days[now.getDay()]} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`; }
+    setInterval(updateClock, 1000); updateClock();
+    function mockPunch(type) { document.getElementById('loadingText').innerText = "定位中..."; document.getElementById('loadingOverlay').style.display = 'flex'; setTimeout(() => { document.getElementById('loadingOverlay').style.display = 'none'; alert(type === 'in' ? "📍 上班打卡成功！" : "🏃‍♂️ 下班打卡成功！"); }, 1500); }
+  </script>
+</body>
+</html>
