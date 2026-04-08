@@ -9,6 +9,16 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
   <script src="config.js"></script>
 
+  // 🛡️ 路由守衛：檢查是否已登入
+    let currentUser = localStorage.getItem('currentUser');
+    let userRole = localStorage.getItem('userRole');
+    let currentStore = localStorage.getItem('lastStore');
+
+    if (!currentUser || !currentStore) {
+        alert("請先登入系統！");
+        window.location.href = "login.html"; // 沒登入，踢回登入頁
+    }
+  
   <style>
     body { font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif; padding: 0; background-color: #f8f9fa; margin: 0; color: #202124; overflow-x: hidden; }
     
